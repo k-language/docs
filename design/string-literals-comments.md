@@ -345,6 +345,197 @@ const chinese: u21 = '中';
 
 ---
 
+## Literal Suffixes
+
+### Type Suffixes (Rust-Style)
+
+**Design**: Type suffixes for numeric and string literals (like Rust).
+
+**Integer suffixes**:
+```k
+const a = 123i32;     // i32
+const b = 456u64;     // u64
+const c = 789isize;   // isize
+const d = 0xFFu8;     // u8 (hex with suffix)
+const e = 0b1010i16;  // i16 (binary with suffix)
+```
+
+**Float suffixes**:
+```k
+const pi = 3.14f64;       // f64
+const small = 0.5f32;     // f32
+const exp = 1.5e10f64;    // f64 (scientific notation)
+```
+
+**String suffixes**:
+```k
+// Byte string (already covered with b"...")
+const bytes = b"hello";
+
+// C-string (null-terminated)
+const c_str = "hello"c;   // [*:0]const u8
+
+// UTF-8 validated string (default)
+const utf8 = "hello"s;    // []const u8 (UTF-8)
+
+// UTF-16 string
+const utf16 = "hello"w;   // []const u16
+
+// UTF-32 string
+const utf32 = "hello"u;   // []const u32
+```
+
+**Why type suffixes?**
+- ✅ Type inference from literal
+- ✅ Explicit and clear
+- ✅ Proven in Rust, Swift, Kotlin
+
+---
+
+### User-Defined Literal Suffixes (C++-Style)
+
+**Design**: Custom literal suffixes via operator overloading (like C++ UDL).
+
+**Basic UDL**:
+```k
+// Define custom literal operator
+fn operator ""_km(value: f64) Kilometer {
+    return Kilometer{ .meters = value * 1000.0 };
+}
+
+fn operator ""_m(value: f64) Meter {
+    return Meter{ .meters = value };
+}
+
+// Usage
+const distance1 = 100_km;     // Kilometer{ .meters = 100000.0 }
+const distance2 = 500_m;      // Meter{ .meters = 500.0 }
+const total = distance1 + distance2.to_km();
+```
+
+**Time literals**:
+```k
+fn operator ""_seconds(value: u64) Duration {
+    return Duration{ .nanos = value * 1_000_000_000 };
+}
+
+fn operator ""_ms(value: u64) Duration {
+    return Duration{ .nanos = value * 1_000_000 };
+}
+
+fn operator ""_minutes(value: u64) Duration {
+    return Duration{ .nanos = value * 60_000_000_000 };
+}
+
+// Usage
+const timeout = 30_seconds;
+const delay = 500_ms;
+const wait = 5_minutes;
+```
+
+**String literals**:
+```k
+fn operator ""_s(value: []const u8) String {
+    return String.from_slice(value);
+}
+
+fn operator ""_json(comptime value: []const u8) JsonValue {
+    return comptime parseJson(value);
+}
+
+fn operator ""_regex(comptime value: []const u8) Regex {
+    return comptime Regex.compile(value);
+}
+
+// Usage
+const str = "Hello, world!"_s;           // String (heap-allocated)
+const json = r#"{"key": "value"}"#_json; // Compile-time parsed JSON
+const pattern = r"^\d{3}-\d{2}-\d{4}$"_regex; // Compile-time regex
+```
+
+**Numeric base literals**:
+```k
+fn operator ""_binary(comptime value: []const u8) u64 {
+    return comptime parseBinary(value);
+}
+
+fn operator ""_hex(comptime value: []const u8) u64 {
+    return comptime parseHex(value);
+}
+
+// Usage
+const bits = "1010_1100"_binary;    // 172
+const addr = "DEADBEEF"_hex;        // 3735928559
+```
+
+**Physical units**:
+```k
+// Physics library
+fn operator ""_kg(value: f64) Mass {
+    return Mass{ .kilograms = value };
+}
+
+fn operator ""_mph(value: f64) Speed {
+    return Speed{ .meters_per_second = value * 0.44704 };
+}
+
+fn operator ""_celsius(value: f64) Temperature {
+    return Temperature{ .kelvin = value + 273.15 };
+}
+
+// Usage
+const weight = 75.5_kg;
+const speed = 60_mph;
+const temp = 25_celsius;
+```
+
+**Compile-time literals**:
+```k
+fn operator ""_sql(comptime query: []const u8) SqlQuery {
+    return comptime {
+        // Validate SQL at compile time
+        const parsed = SqlParser.parse(query);
+        validateSql(parsed);
+        return SqlQuery{ .query = query, .parsed = parsed };
+    };
+}
+
+// Usage - compile-time SQL validation!
+const query = r"SELECT * FROM users WHERE age > 18"_sql;
+```
+
+**Syntax**:
+- Suffix starts with `_` (underscore)
+- Can be alphanumeric after underscore
+- Case-sensitive
+
+**Operator signature**:
+```k
+// For numeric literals (compile-time only)
+fn operator ""_suffix(comptime value: T) ReturnType {
+    return comptime /* ... */;
+}
+
+// For string literals (compile-time only)
+fn operator ""_suffix(comptime value: []const u8) ReturnType {
+    return comptime /* ... */;
+}
+```
+
+**Why user-defined literals?**
+- ✅ Domain-specific types (units, durations)
+- ✅ Compile-time validation (SQL, regex, JSON)
+- ✅ Type-safe (no runtime overhead)
+- ✅ Ergonomic (clean syntax)
+- ✅ Proven in C++, D, Nim
+
+**Restrictions**:
+- Only `comptime` functions (no runtime UDL)
+- Must start with `_`
+- Reserved suffixes: `i8`, `i16`, `i32`, `i64`, `i128`, `isize`, `u8`, `u16`, `u32`, `u64`, `u128`, `usize`, `f32`, `f64`, `c`, `s`, `w`, `u`, `b`
+
+---
+
 ## Complete Examples
 
 ### Example 1: Configuration File Template
@@ -429,19 +620,22 @@ fn render_page(title: []const u8, content: []const u8) []const u8 {
 
 ## Comparison with Other Languages
 
-| Feature | Rust | Python | Swift | Zig | **K** |
-|---------|------|--------|-------|-----|-------|
-| **Nested comments** | ✅ `/* /* */ */` | ❌ | ✅ `/* /* */ */` | ❌ | ✅ `/* /* */ */` |
-| **Raw strings** | ✅ `r#"..."#` | ✅ `r"..."` | ✅ `#"..."#` | ❌ | ✅ `r#"..."#` |
-| **Multi-line strings** | ❌ | ✅ `"""..."""` | ✅ `"""..."""` | ✅ `\\` | ✅ `"""..."""` |
-| **String interpolation** | ⚠️ `format!()` | ✅ `f"..."` | ✅ `"\(x)"` | ❌ | ✅ `"{x}"` |
-| **Byte strings** | ✅ `b"..."` | ✅ `b"..."` | ❌ | ❌ | ✅ `b"..."` |
-| **Custom delimiters** | ✅ Multiple `#` | ❌ | ✅ Multiple `#` | ❌ | ✅ Multiple `#` |
+| Feature | Rust | Python | Swift | C++ | Zig | **K** |
+|---------|------|--------|-------|-----|-----|-------|
+| **Nested comments** | ✅ `/* /* */ */` | ❌ | ✅ `/* /* */ */` | ❌ | ❌ | ✅ `/* /* */ */` |
+| **Raw strings** | ✅ `r#"..."#` | ✅ `r"..."` | ✅ `#"..."#` | ✅ `R"(...)"` | ❌ | ✅ `r#"..."#` |
+| **Multi-line strings** | ❌ | ✅ `"""..."""` | ✅ `"""..."""` | ❌ | ✅ `\\` | ✅ `"""..."""` |
+| **String interpolation** | ⚠️ `format!()` | ✅ `f"..."` | ✅ `"\(x)"` | ⚠️ Lib | ❌ | ✅ `"{x}"` |
+| **Byte strings** | ✅ `b"..."` | ✅ `b"..."` | ❌ | ❌ | ❌ | ✅ `b"..."` |
+| **Custom delimiters** | ✅ Multiple `#` | ❌ | ✅ Multiple `#` | ✅ `R"()"` | ❌ | ✅ Multiple `#` |
+| **Type suffixes** | ✅ `123u64` | ❌ | ❌ | ✅ `123ULL` | ✅ `123` | ✅ `123u64` |
+| **User-defined literals** | ❌ | ❌ | ❌ | ✅ `123_km` | ❌ | ✅ `123_km` |
 
 **K combines best features**:
-- Rust's raw strings and byte strings
+- Rust's raw strings, byte strings, type suffixes
 - Python's multi-line strings
 - Swift's string interpolation and nesting
+- C++'s user-defined literals (but compile-time only)
 - Custom delimiter depth (Rust/Swift style)
 
 ---
@@ -488,10 +682,31 @@ b"Byte data"
 br"Raw bytes"
 br#"Raw with "#"#
 
+// String suffixes
+"hello"c     // C-string (null-terminated)
+"hello"s     // UTF-8 string
+"hello"w     // UTF-16 string
+"hello"u     // UTF-32 string
+
 // Characters
 'A'
 '\n'
 '\u{1F600}'
+
+// Numeric literals
+123          // Inferred type
+123i32       // i32
+456u64       // u64
+0xFFu8       // u8 (hex)
+0b1010i16    // i16 (binary)
+3.14f64      // f64
+0.5f32       // f32
+
+// User-defined literals
+100_km       // Custom type (Kilometer)
+30_seconds   // Custom type (Duration)
+"hello"_s    // Custom string type
+r"SELECT *"_sql  // Compile-time validated SQL
 ```
 
 ---
