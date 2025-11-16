@@ -32,10 +32,18 @@ fn process_result(result: Result) void {
 
 ```k
 fn check_option(maybe_value: ?i32) void {
-    if let (Some(value) = maybe_value) {
+    // Option 1: Direct optional unwrapping (recommended)
+    if (maybe_value) |value| {
         std.debug.print("Got value: {}\n", .{value});
     } else {
         std.debug.print("No value\n", .{});
+    }
+}
+
+// Option 2: If let with ? pattern
+fn check_option_alt(maybe_value: ?i32) void {
+    if let (?value = maybe_value) {
+        std.debug.print("Got value: {}\n", .{value});
     }
 }
 
@@ -53,7 +61,16 @@ fn process_if_ok(result: Result) void {
 
 ```k
 fn drain_iterator(iter: &mut Iterator(i32)) void {
-    while let (Some(item) = iter.next()) {
+    // Iterator.next() returns ?i32
+    // Option 1: Direct optional unwrapping (recommended)
+    while (iter.next()) |item| {
+        std.debug.print("Item: {}\n", .{item});
+    }
+}
+
+// Option 2: while let with ? pattern
+fn drain_iterator_alt(iter: &mut Iterator(i32)) void {
+    while let (?item = iter.next()) {
         std.debug.print("Item: {}\n", .{item});
     }
 }

@@ -48,7 +48,8 @@ fn process_result(result: Result) void {
 
 // Example 4: If Let
 fn check_option(maybe: ?i32) void {
-    if let (Some(value) = maybe) {
+    // Direct optional unwrapping (Zig-style)
+    if (maybe) |value| {
         std.debug.print("Got value: {}\n", .{value});
     } else {
         std.debug.print("No value\n", .{});
@@ -83,7 +84,8 @@ fn drain_iterator() void {
     const numbers = [_]i32{1, 2, 3, 4, 5};
     var iter = Iterator.init(&numbers);
 
-    while let (Some(item) = iter.next()) {
+    // Direct optional unwrapping with while
+    while (iter.next()) |item| {
         std.debug.print("Item: {}\n", .{item});
     }
 }

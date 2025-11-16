@@ -68,8 +68,10 @@ const !Sync Cell = struct {
     }
 
     pub fn set(self: &Cell, value: i32) void {
-        // UNSAFE: Multiple threads could call this
-        self.value = value;
+        // UNSAFE: Mutating through immutable reference
+        // Requires explicit @constCast - programmer's responsibility
+        const mut_self = @constCast(self);
+        mut_self.value = value;
     }
 };
 ```
@@ -145,9 +147,13 @@ fn increment(counter: &AtomicI32) void {
 fn unsafe_thread_example() !void {
     var counter: i32 = 0;
 
-    // ERROR: &mut i32 is not Send
+    // ERROR: &mut i32 is Send but NOT Sync
+    // Cannot share mutable reference between threads
     // const handle = try Thread.spawn(.{}, bad_increment, .{&mut counter});
 }
+
+// Note: &mut T is Send if T is Send (can transfer ownership)
+//       &mut T is never Sync (cannot share between threads)
 ```
 
 ## Message Passing

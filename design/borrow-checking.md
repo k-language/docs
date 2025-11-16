@@ -157,28 +157,90 @@ fn borrow_slice(data: &[u8]) &[u8] {
 
 ## Drop Trait and RAII
 
-K supports automatic cleanup via the `Drop` trait (similar to Rust), but allows opting out with `nodrop`:
+K provides two mechanisms for cleanup:
+
+### 1. Defer (Zig-style) - For Allocator Memory
+
+Use `defer` for memory allocated from allocators:
 
 ```k
-// Automatic cleanup
+fn with_allocator(allocator: Allocator) !void {
+    const buffer = try allocator.alloc(u8, 1024);
+    defer allocator.free(buffer);  // Manual, explicit cleanup
+
+    // Use buffer...
+} // buffer freed here via defer
+```
+
+### 2. Drop Trait (Rust-style) - For Resource Types
+
+Use `Drop` for types owning non-memory resources (files, sockets, locks):
+
+```k
+// Automatic cleanup via Drop
 const File = struct {
     handle: FileHandle,
 
+    pub fn open(path: []const u8) !File {
+        return File{ .handle = try open_file(path) };
+    }
+
+    // Called automatically when File goes out of scope
     pub fn drop(self: &mut File) void {
         close_file(self.handle);
     }
 };
 
+fn use_file() !void {
+    const file = try File.open("data.txt");
+    // No defer needed - Drop handles cleanup
+    write_to_file(file);
+} // file.drop() called automatically here
+```
+
+### 3. Nodrop - Opt-out of Automatic Drop
+
+Use `nodrop` when you need manual control:
+
+```k
 // Opt-out of automatic cleanup for manual control
-const nodrop ManualBuffer = struct {
-    data: []u8,
-    allocator: Allocator,
+const nodrop ManualFile = struct {
+    handle: FileHandle,
 
     // Must explicitly call cleanup
-    pub fn deinit(self: &mut ManualBuffer) void {
-        self.allocator.free(self.data);
+    pub fn close(self: &mut ManualFile) void {
+        close_file(self.handle);
     }
 };
+
+fn manual_control() !void {
+    var file = ManualFile{ .handle = try open_file("data.txt") };
+    defer file.close();  // Must use defer or call manually
+
+    // Use file...
+} // No automatic drop - must call close()
+```
+
+### Guidelines
+
+- **Allocator memory**: Use `defer allocator.free()` (explicit)
+- **System resources**: Use `Drop` trait (automatic)
+- **Manual control needed**: Use `nodrop` + `defer`
+
+```k
+fn example_all_three(allocator: Allocator) !void {
+    // 1. Allocator memory - use defer
+    const buffer = try allocator.alloc(u8, 1024);
+    defer allocator.free(buffer);
+
+    // 2. Resource type - Drop handles it
+    const file = try File.open("data.txt");
+    // No defer needed
+
+    // 3. Manual control - nodrop + defer
+    var manual_file = ManualFile{ .handle = try open_file("log.txt") };
+    defer manual_file.close();
+}
 ```
 
 ## Unsafe Escape Hatches
