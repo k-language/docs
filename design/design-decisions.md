@@ -217,7 +217,104 @@ fn raw_operation(ptr: *u8) void {
 - Required for FFI and low-level code
 - Principle of least privilege
 
-### 10. Module System: File-based with Visibility
+### 10. Generic Struct Syntax: Function-Returning-Type (Zig-style)
+
+**Decision**: Use Zig's function syntax for generic types
+
+```k
+// K Language (adopted) - Zig-style
+fn ArrayList(comptime T: type) type {
+    return struct {
+        items: []T,
+        len: usize,
+        allocator: Allocator,
+
+        const Self = @This();
+
+        pub fn init(allocator: Allocator) Self {
+            return Self{ .items = &[_]T{}, .len = 0, .allocator = allocator };
+        }
+    };
+}
+
+// Usage
+var list = ArrayList(i32).init(allocator);
+```
+
+**Alternative Syntax** (available as syntactic sugar):
+```k
+// Shorthand notation - equivalent to above
+const ArrayList = struct(comptime T: type) {
+    items: []T,
+    // ... same body
+};
+```
+
+**Rationale**:
+- **Primary style**: Zig's `fn Type(comptime T: type) type` is the canonical form
+  - More explicit and clear that it's compile-time
+  - Matches Zig's philosophy of explicitness
+  - Works with all comptime logic
+- **Sugar allowed**: `struct(T)` syntax may be used for brevity
+  - Compiles to the same code
+  - Reader preference
+  - Both styles in documentation are acceptable
+- **Consistency**: When both appear in docs, they demonstrate equivalence
+- **Flexibility**: Choose based on context (tutorial vs. reference)
+
+### 11. Self Reference in Generic Types: @This() Pattern
+
+**Decision**: Use `@This()` to refer to the current type, assign to `Self` for convenience
+
+```k
+fn ArrayList(comptime T: type) type {
+    return struct {
+        items: []T,
+        len: usize,
+
+        const Self = @This();  // Define Self once
+
+        pub fn init() Self {   // Use Self in signatures
+            return Self{ .items = &[_]T{}, .len = 0 };
+        }
+
+        pub fn append(self: &mut Self, item: T) !void {
+            // ...
+        }
+    };
+}
+```
+
+**Alternative** (explicit type name):
+```k
+// Also valid - use explicit type name
+pub fn clone(self: &Rc(T)) Rc(T) {
+    return Rc(T){ .ptr = self.ptr };
+}
+```
+
+**Guidelines**:
+1. **Within generic functions/structs**: Use `Self = @This()` pattern
+   - More maintainable if type name changes
+   - Shorter and clearer
+   - Standard Zig practice
+
+2. **Simple cases**: Direct type name is fine
+   - When type is short and non-generic
+   - For clarity in documentation
+   - When `Self` would be ambiguous
+
+3. **Consistency**: Pick one style per file/module
+   - Don't mix both in the same struct
+   - Follow existing code style in the file
+
+**Rationale**:
+- `@This()` is Zig's standard way to get current type
+- `Self` alias reduces repetition in generics
+- Explicit type names can be clearer in simple cases
+- Both are valid - consistency matters most
+
+### 12. Module System: File-based with Visibility
 
 **Decision**: Zig's file-based modules + Rust's pub(crate)
 

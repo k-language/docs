@@ -364,11 +364,22 @@ K supports asynchronous programming with async functions and the await keyword:
 
 ### Async Functions
 
+**Important**: When you write `async fn foo() T`, the actual return type is `Future(T)`, not `T`.
+
 ```k
-// Async function returns a Future
+// Written as: async fn fetch_data(...) ![]const u8
+// Actual return type: Future(![]const u8)
 async fn fetch_data(url: []const u8) ![]const u8 {
     const response = await http_get(url);
     return response.body;
+}
+
+// Calling async functions:
+fn example() !void {
+    const future = fetch_data("https://example.com");  // Type: Future(![]const u8)
+    const data = await future;                          // Type: ![]const u8
+    // Or directly:
+    const data2 = await fetch_data("https://example.com");
 }
 
 async fn http_get(url: []const u8) !Response {
@@ -376,6 +387,8 @@ async fn http_get(url: []const u8) !Response {
     // ...
 }
 ```
+
+**Rationale**: The function signature shows the "eventual" type for readability, but the compiler actually returns a Future that yields that type when awaited.
 
 ### Future Trait
 
