@@ -93,14 +93,104 @@ const !Sync RefCell = struct {
     value: i32,
     borrowed: bool,
 };
+```
 
-// Arc (atomic reference counting) is both Send and Sync
-const Arc = struct {
-    ptr: *mut ArcInner,
+### Reference Counting Types
 
-    // Arc<T> is Send if T is Send + Sync
-    // Arc<T> is Sync if T is Send + Sync
+K provides two reference counting types with different thread-safety guarantees:
+
+#### Rc<T> - Single-Threaded Reference Counting
+
+```k
+/// Single-threaded reference counted pointer.
+/// NOT thread-safe - cannot be sent between threads.
+const Rc = struct(comptime T: type) {
+    ptr: *mut RcInner(T),
+
+    const RcInner = struct {
+        strong: usize,
+        weak: usize,
+        value: T,
+    };
+
+    pub fn init(allocator: Allocator, value: T) !Rc(T) {
+        const inner = try allocator.create(RcInner(T));
+        inner.* = RcInner(T){ .strong = 1, .weak = 0, .value = value };
+        return Rc(T){ .ptr = inner };
+    }
+
+    pub fn clone(self: &Rc(T)) Rc(T) {
+        self.ptr.strong += 1;
+        return Rc(T){ .ptr = self.ptr };
+    }
 };
+
+// Rc is NEVER Send or Sync (not thread-safe)
+const !Send !Sync = Rc(T);  // For all T
+```
+
+**Why !Send and !Sync?** Rc uses non-atomic reference counting for performance. Sharing Rc between threads would cause data races on the reference count.
+
+#### Arc<T> - Thread-Safe Reference Counting
+
+```k
+/// Atomic reference counted pointer.
+/// Thread-safe - can be sent and shared between threads if T allows it.
+const Arc = struct(comptime T: type) {
+    ptr: *mut ArcInner(T),
+
+    const ArcInner = struct {
+        strong: AtomicUsize,
+        weak: AtomicUsize,
+        value: T,
+    };
+
+    pub fn init(allocator: Allocator, value: T) !Arc(T) {
+        const inner = try allocator.create(ArcInner(T));
+        inner.* = ArcInner(T){
+            .strong = AtomicUsize.init(1),
+            .weak = AtomicUsize.init(0),
+            .value = value,
+        };
+        return Arc(T){ .ptr = inner };
+    }
+
+    pub fn clone(self: &Arc(T)) Arc(T) {
+        _ = self.ptr.strong.fetchAdd(1, .SeqCst);
+        return Arc(T){ .ptr = self.ptr };
+    }
+};
+
+// Arc is Send + Sync ONLY if T is Send + Sync
+impl Send for Arc(T) where T: Send + Sync {}
+impl Sync for Arc(T) where T: Send + Sync {}
+```
+
+**Why T: Send + Sync?** Arc allows multiple threads to access the same value via `&T`. Therefore:
+- `T` must be `Sync` (safe to share `&T` across threads)
+- `T` must be `Send` (value might be dropped in a different thread)
+
+**Example:**
+
+```k
+fn arc_example() !void {
+    // Arc allows sharing data across threads
+    const data = try Arc.init(allocator, expensive_data);
+
+    var threads: [4]Thread = undefined;
+    for (&threads) |*handle| {
+        const data_clone = data.clone();  // Increment ref count
+        handle.* = try Thread.spawn(.{}, worker, .{data_clone});
+    }
+
+    for (threads) |handle| {
+        handle.join();
+    }
+    // data freed when last Arc is dropped
+}
+```
+
+> **Note**: For complete implementations including Drop trait, Weak pointers, and interior mutability types (Cell, RefCell, Mutex, RwLock), see [std-library-types.md](std-library-types.md).
 ```
 
 ## Threads

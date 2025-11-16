@@ -227,6 +227,8 @@ fn manual_control() !void {
 - **System resources**: Use `Drop` trait (automatic)
 - **Manual control needed**: Use `nodrop` + `defer`
 
+> **Note**: For complete standard library types with Drop implementations (Arc, Rc, Cell, RefCell, Mutex, RwLock), see [std-library-types.md](std-library-types.md)
+
 ```k
 fn example_all_three(allocator: Allocator) !void {
     // 1. Allocator memory - use defer
