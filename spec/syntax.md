@@ -586,6 +586,56 @@ fn order_example() !void {
 }
 ```
 
+**Labelled defer** (block-scoped cleanup):
+
+```k
+fn lock_example() void {
+    outer_work();
+
+    critical: {
+        const lock = acquire_lock();
+        defer :critical release_lock(lock);  // Releases when leaving :critical
+
+        if (!can_proceed()) {
+            break :critical;  // lock released HERE
+        }
+
+        perform_critical_work();
+    }  // or lock released HERE
+
+    outer_work_continues();  // No lock held
+}
+
+// Works with loops too
+fn loop_example() !void {
+    outer: for (items) |item| {
+        const resource = acquire_for(item);
+        defer :outer release(resource);  // Releases each iteration
+
+        if (should_skip(item)) {
+            continue :outer;  // resource released, next iteration
+        }
+
+        try process(item);
+    }  // resource released after each iteration
+}
+
+// Combine labels with conditionals
+fn transaction_example() !void {
+    tx: {
+        const t = begin_transaction();
+        defer :tx on .Ok commit(t);
+        defer :tx on .Err rollback(t);
+
+        const result = operation() catch |err| {
+            break :tx;  // rollback runs, commit skipped
+        };
+
+        process(result);
+    }  // commit runs if no error
+}
+```
+
 > See [conditional-defer.md](../design/conditional-defer.md) for complete design and rationale
 
 ### Drop Trait (RAII)
