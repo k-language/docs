@@ -379,14 +379,14 @@ match (day) {
 Pattern matching in conditional expressions:
 
 ```k
-// Match optional values
-if let (Some(value) = maybe_value) {
+// Match optional values - direct unwrapping (Zig-style)
+if (maybe_value) |value| {
     print("Got: {}", .{value});
 } else {
     print("Nothing");
 }
 
-// Match enum variants
+// Match enum variants with if let
 if let (.Ok = result = try_operation()) {
     print("Success: {}", .{result});
 }
@@ -402,12 +402,12 @@ if let ({ .x = x, .y = y } = get_point()) {
 Loop while pattern matches:
 
 ```k
-// Drain an iterator
-while let (Some(item) = iter.next()) {
+// Drain an iterator - direct unwrapping
+while (iter.next()) |item| {
     process(item);
 }
 
-// Match until error
+// Match until error with while let
 while let (.Ok = value = read_next()) {
     handle(value);
 }

@@ -611,44 +611,55 @@ fn match_color_fixed(color: Color) void {
 
 ## Examples
 
-### Example 1: Generic Option Type with Pattern Matching
+### Example 1: Generic Result Type with Pattern Matching
 
 ```k
-fn Option(comptime T: type) type {
+fn Result(comptime T: type, comptime E: type) type {
     return enum {
-        Some: T,
-        None,
+        Ok: T,
+        Err: E,
 
-        pub fn map(self: @This(), comptime U: type, f: fn(T) U) Option(U) {
+        pub fn map(self: @This(), comptime U: type, f: fn(T) U) Result(U, E) {
             return match (self) {
-                .Some => |value| Option(U){ .Some = f(value) },
-                .None => Option(U).None,
+                .Ok => |value| Result(U, E){ .Ok = f(value) },
+                .Err => |err| Result(U, E){ .Err = err },
             };
         }
 
         pub fn and_then(
             self: @This(),
             comptime U: type,
-            f: fn(T) Option(U),
-        ) Option(U) {
+            f: fn(T) Result(U, E),
+        ) Result(U, E) {
             return match (self) {
-                .Some => |value| f(value),
-                .None => Option(U).None,
+                .Ok => |value| f(value),
+                .Err => |err| Result(U, E){ .Err = err },
+            };
+        }
+
+        pub fn is_ok(self: @This()) bool {
+            return match (self) {
+                .Ok => true,
+                .Err => false,
             };
         }
     };
 }
 
-fn example_option() void {
-    const maybe = Option(i32){ .Some = 42 };
+fn example_result() void {
+    const result = Result(i32, []const u8){ .Ok = 42 };
 
-    const doubled = maybe.map(i32, fn(x: i32) i32 { return x * 2; });
+    const doubled = result.map(i32, fn(x: i32) i32 { return x * 2; });
 
     match (doubled) {
-        .Some => |value| std.debug.print("Result: {}\n", .{value}),
-        .None => std.debug.print("No value\n", .{}),
+        .Ok => |value| std.debug.print("Result: {}\n", .{value}),
+        .Err => |err| std.debug.print("Error: {s}\n", .{err}),
     }
 }
+
+// Note: For simple optional values, use built-in ?T type:
+//   const maybe: ?i32 = 42;
+//   if (maybe) |value| { ... }
 ```
 
 ### Example 2: Generic Tree with Trait Bounds
@@ -665,7 +676,7 @@ fn BinaryTree(comptime T: type) type
 
         pub fn insert(self: &mut @This(), value: T) !void {
             if (value < self.value) {
-                if let (Some(ref mut left) = self.left) {
+                if (self.left) |left| {
                     try left.insert(value);
                 } else {
                     const node = try self.allocator.create(@This());

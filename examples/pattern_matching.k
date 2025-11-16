@@ -306,10 +306,10 @@ fn max(a: i32, b: i32) i32 {
     };
 }
 
-// Example 17: Option Chaining with If Let
+// Example 17: Optional Chaining
 fn process_chain(opt1: ?i32, opt2: ?i32) void {
-    if let (Some(v1) = opt1) {
-        if let (Some(v2) = opt2) {
+    if (opt1) |v1| {
+        if (opt2) |v2| {
             std.debug.print("Both present: {} and {}\n", .{v1, v2});
         } else {
             std.debug.print("Only first present: {}\n", .{v1});
