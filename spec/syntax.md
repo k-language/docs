@@ -521,20 +521,72 @@ fn example(allocator: Allocator) !void {
 }
 ```
 
-### Defer and Errdefer
+### Defer and Conditional Defer
+
+K provides pattern-based cleanup that executes based on function return value.
 
 ```k
 fn resource_example() !void {
     const file = try open_file("data.txt");
-    defer close_file(file);  // Always executed
+    defer close_file(file);             // Always executed
 
     const buffer = try allocate_buffer();
-    errdefer free_buffer(buffer);  // Only on error
+    defer on .Err free_buffer(buffer);  // Only on error return
+    defer on .Ok log_success();         // Only on success return
 
     try process_file(file, buffer);
     free_buffer(buffer);  // Manual cleanup on success
 }
+
+// errdefer is sugar for: defer on .Err
+fn sugar_example() !void {
+    const buffer = try allocate_buffer();
+    errdefer free_buffer(buffer);       // Sugar for: defer on .Err
+}
 ```
+
+**Conditional defer works with any enum**:
+
+```k
+// With Option type
+fn find_user(id: i32) ?User {
+    defer on .Some increment_hits();    // Track cache hit
+    defer on .None increment_misses();  // Track cache miss
+
+    return cache.lookup(id);
+}
+
+// With custom enum
+const Status = enum { Success, Failure, Cancelled };
+
+fn operation() Status {
+    defer on .Success log_success();
+    defer on .Failure log_failure();
+    defer on .Cancelled log_cancelled();
+
+    return perform_operation();
+}
+```
+
+**Execution order** (LIFO - last in, first out):
+```k
+fn order_example() !void {
+    defer cleanup1();               // 4th (always)
+    defer on .Err cleanup2();       // 3rd (if error)
+    defer cleanup3();               // 2nd (always)
+    defer on .Ok cleanup4();        // 1st (if success)
+
+    return error.Failed;  // Returns .Err variant
+
+    // Execution:
+    // - cleanup4() SKIPPED (.Ok doesn't match)
+    // - cleanup3() RUNS (unconditional)
+    // - cleanup2() RUNS (.Err matches)
+    // - cleanup1() RUNS (unconditional)
+}
+```
+
+> See [conditional-defer.md](../design/conditional-defer.md) for complete design and rationale
 
 ### Drop Trait (RAII)
 

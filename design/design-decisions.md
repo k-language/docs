@@ -45,9 +45,9 @@ fn foo(x: ?i32) !void { ... }
 fn foo(x: Option<i32>) Result<void, Error> { ... }
 ```
 
-### 2. Memory Management: Three-Tier System
+### 2. Memory Management: Three-Tier System + Conditional Defer
 
-**Decision**: defer + Drop + nodrop
+**Decision**: defer + Drop + nodrop + conditional defer
 
 ```k
 // Tier 1: Allocator memory - use defer (explicit)
@@ -63,11 +63,31 @@ const nodrop manual = ManualType{ ... };
 defer manual.deinit();
 ```
 
+**Conditional Defer**: Cleanup based on return variant
+
+```k
+fn process() !Data {
+    const temp = try allocate();
+    defer on .Err free(temp);       // Free only on error
+    defer on .Ok log_success();     // Log only on success
+
+    const data = try parse(temp);
+    return data;
+}
+
+// errdefer is sugar for: defer on .Err
+errdefer free(temp);  // Same as: defer on .Err free(temp);
+```
+
 **Rationale**:
-- Zig's defer: Explicit control for memory
-- Rust's Drop: Convenience for resources
-- nodrop: Escape hatch for low-level code
-- Flexibility without sacrificing safety
+- **Zig's defer**: Explicit control for memory
+- **Rust's Drop**: Convenience for resources
+- **nodrop**: Escape hatch for low-level code
+- **Conditional defer**: Generalized errdefer for any enum
+- **Consistency**: No special compiler magic - works with Result, Option, custom enums
+- **Flexibility**: Pattern-based cleanup without sacrificing safety
+
+> See [conditional-defer.md](conditional-defer.md) for complete design analysis
 
 ### 3. Error Handling: Sugar for Result Types
 
