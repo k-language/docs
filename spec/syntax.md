@@ -10,10 +10,10 @@ K Language syntax is inspired by both Zig and Rust, favoring explicitness and re
 
 ```
 // Control flow
-if else switch while for break continue return
+if else switch match while for break continue return let
 
 // Functions and types
-fn struct enum union const var pub
+fn struct enum union const var pub async await
 
 // Memory and ownership
 mut ref defer errdefer unsafe nodrop
@@ -28,7 +28,10 @@ try catch error
 void unreachable undefined
 
 // Type system
-type trait impl where
+type trait impl where Self
+
+// Concurrency
+Send Sync
 
 // Primitive types
 i8 i16 i32 i64 i128 isize
@@ -322,37 +325,92 @@ if (try_get()) |value| {
 }
 ```
 
-### Switch Expressions
+### Match Expressions
+
+K uses `match` for exhaustive pattern matching:
 
 ```k
-// Switch on integers
-const digit = switch (n) {
+// Match on values
+const digit = match (n) {
     0 => "zero",
     1 => "one",
     2 => "two",
+    3...10 => "small",
     else => "other",
 };
 
-// Switch on enums
-switch (color) {
+// Match on enums
+match (color) {
     .Red => print("Red"),
     .Green => print("Green"),
     .Blue => print("Blue"),
 }
 
-// Switch with payloads
-switch (result) {
+// Match with payloads
+match (result) {
     .Ok => |value| process(value),
     .Err => |msg| handle_error(msg),
 }
 
-// Switch with ranges
-const category = switch (age) {
-    0...12 => "child",
-    13...19 => "teen",
-    20...64 => "adult",
-    else => "senior",
-};
+// Match with guards
+match (x) {
+    n if (n < 0) => print("Negative"),
+    n if (n == 0) => print("Zero"),
+    n => print("Positive: {}", .{n}),
+}
+
+// Match with destructuring
+match (point) {
+    { .x = 0.0, .y = 0.0 } => print("Origin"),
+    { .x = x, .y = 0.0 } => print("On X axis: {}", .{x}),
+    { .x = 0.0, .y = y } => print("On Y axis: {}", .{y}),
+    { .x = x, .y = y } => print("Point: ({}, {})", .{x, y}),
+}
+
+// Or patterns
+match (day) {
+    .Saturday | .Sunday => print("Weekend"),
+    else => print("Weekday"),
+}
+```
+
+### If Let
+
+Pattern matching in conditional expressions:
+
+```k
+// Match optional values
+if let (Some(value) = maybe_value) {
+    print("Got: {}", .{value});
+} else {
+    print("Nothing");
+}
+
+// Match enum variants
+if let (.Ok = result = try_operation()) {
+    print("Success: {}", .{result});
+}
+
+// With destructuring
+if let ({ .x = x, .y = y } = get_point()) {
+    print("Point: ({}, {})", .{x, y});
+}
+```
+
+### While Let
+
+Loop while pattern matches:
+
+```k
+// Drain an iterator
+while let (Some(item) = iter.next()) {
+    process(item);
+}
+
+// Match until error
+while let (.Ok = value = read_next()) {
+    handle(value);
+}
 ```
 
 ### Loops
@@ -643,6 +701,94 @@ fn print_value(comptime T: type, value: &T) !void
 }
 ```
 
+## Async/Await
+
+Asynchronous programming with async functions and await:
+
+```k
+// Async function returns a Future
+async fn fetch_data(url: []const u8) ![]u8 {
+    const response = await http_get(url);
+    return response.body;
+}
+
+// Await suspends until future completes
+async fn process() !void {
+    const data = await fetch_data("https://example.com");
+    defer allocator.free(data);
+
+    print("Got {} bytes\n", .{data.len});
+}
+
+// Run multiple async tasks concurrently
+async fn download_all(urls: [][]const u8) !void {
+    var tasks = ArrayList(Future([]u8)).init(allocator);
+
+    for (urls) |url| {
+        try tasks.append(async fetch_data(url));
+    }
+
+    for (tasks.items) |task| {
+        const data = await task;
+        defer allocator.free(data);
+        process_data(data);
+    }
+}
+
+// Select - wait for first to complete
+async fn race() !void {
+    const task1 = async operation1();
+    const task2 = async operation2();
+
+    const result = select(.{task1, task2});
+
+    match (result) {
+        .task1 => |val| print("Task 1: {}\n", .{val}),
+        .task2 => |val| print("Task 2: {}\n", .{val}),
+    }
+}
+```
+
+## Concurrency
+
+Thread safety with Send/Sync traits:
+
+```k
+// Send: safe to transfer between threads
+// Sync: safe to share references between threads
+
+// Atomic types are both Send and Sync
+const Counter = struct {
+    value: AtomicI32,
+};
+
+impl Send for Counter {}
+impl Sync for Counter {}
+
+// Opt-out of Send/Sync
+const !Send !Sync LocalData = struct {
+    ptr: *void,
+};
+
+// Spawn threads
+fn spawn_worker() !void {
+    const handle = try Thread.spawn(.{}, worker, .{42});
+    handle.join();
+}
+
+// Mutex for shared state
+const SharedData = struct {
+    mutex: Mutex,
+    value: i32,
+
+    pub fn increment(self: &SharedData) void {
+        self.mutex.lock();
+        defer self.mutex.unlock();
+        self.value += 1;
+    }
+};
+```
+
 ## Modules and Imports
 
 ```k
@@ -659,6 +805,16 @@ pub const VERSION = "0.1.0";
 
 pub fn init() !void {
     // Initialization code
+}
+
+// Public to crate (entire project)
+pub(crate) fn internal_api() void {
+    // Visible anywhere in this crate
+}
+
+// Public to parent module
+pub(super) fn parent_only() void {
+    // Visible to parent module only
 }
 
 // Private by default
