@@ -243,6 +243,69 @@ fn example_all_three(allocator: Allocator) !void {
 }
 ```
 
+### Critical Safety Rules
+
+#### Rule 1: Deferred Resources Cannot Be Manually Freed
+
+Once a resource is deferred, it cannot be manually freed to prevent double-free:
+
+```k
+fn safe_defer() !void {
+    const data = try allocator.alloc(u8, 1024);
+    defer allocator.free(data);
+
+    // ERROR: Cannot manually free deferred resource
+    // allocator.free(data);  // Compile error!
+
+    use(data);
+}  // Freed here via defer
+```
+
+**Rationale**: Prevents double-free bugs.
+
+#### Rule 2: Drop + defer Execution Order
+
+When both Drop and defer are present, execution order is:
+1. **defer statements** (LIFO - last in, first out)
+2. **Drop traits** (after all defers)
+
+```k
+fn execution_order() !void {
+    defer std.debug.print("Defer 1\n", .{});
+
+    var obj = DroppableType{ ... };
+    defer std.debug.print("Defer 2\n", .{});
+
+    // Execution:
+    // 1. "Defer 2" (last defer first)
+    // 2. "Defer 1" (first defer last)
+    // 3. obj.drop() (Drop after all defers)
+}
+```
+
+**Rationale**:
+- defers execute in reverse order (stack semantics)
+- Drop executes last to allow defers to access the object
+
+#### Rule 3: nodrop Types Must Have Explicit Cleanup
+
+Types marked `nodrop` will trigger a compiler warning if not explicitly cleaned up:
+
+```k
+#[warn(nodrop_no_cleanup)]
+fn potential_leak() !void {
+    var manual = nodrop Manual{ ... };
+}  // Warning: nodrop type not cleaned up
+
+// Fix: Add explicit cleanup
+fn no_leak() !void {
+    var manual = nodrop Manual{ ... };
+    defer manual.deinit();  // OK
+}
+```
+
+**Rationale**: Prevents accidental memory leaks from forgotten cleanup.
+
 ## Unsafe Escape Hatches
 
 For low-level systems programming, K provides `unsafe` blocks that disable borrow checking:
