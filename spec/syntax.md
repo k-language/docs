@@ -154,6 +154,53 @@ const ref = &x;      // Immutable reference
 const mut_ref = &mut x;  // Mutable reference
 ```
 
+### Type Sugar
+
+K provides concise syntax for common generic types. All sugar desugars to standard library generic types.
+
+```k
+// Optional Types
+const maybe: ?i32 = 42;              // Sugar
+const maybe: Option<i32> = 42;       // Desugared form (equivalent)
+
+if (maybe) |value| {
+    print("{}", .{value});
+}
+
+// Error Unions
+fn parse() !i32 { ... }              // Sugar for Result<i32, Error>
+fn parse() Result<i32, Error> { ... } // Desugared form
+
+const result = try parse();           // Unwrap or propagate error
+
+// Arrays and Slices
+const arr: [5]i32 = ...;             // Sugar for Array<i32, 5>
+const slice: []i32 = ...;            // Sugar for Slice<i32>
+
+// Pointers and References
+const ptr: *i32 = ...;               // Sugar for Ptr<i32>
+const ref: &i32 = ...;               // Sugar for Ref<i32>
+const mref: &mut i32 = ...;          // Sugar for RefMut<i32>
+```
+
+**Complete Sugar Table**:
+
+| Sugar      | Desugars To          | Description                |
+|------------|----------------------|----------------------------|
+| `?T`       | `Option<T>`          | Optional value             |
+| `!T`       | `Result<T, Error>`   | Error union (inferred set) |
+| `[N]T`     | `Array<T, N>`        | Fixed-size array           |
+| `[]T`      | `Slice<T>`           | Dynamically-sized view     |
+| `*T`       | `Ptr<T>`             | Raw pointer                |
+| `&T`       | `Ref<T>`             | Immutable reference        |
+| `&mut T`   | `RefMut<T>`          | Mutable reference          |
+
+**Why Sugar?**
+- **Consistency**: Everything is a library type, no compiler magic
+- **Simplicity**: Concise syntax for common cases
+- **Transparency**: Can use explicit form for clarity
+- **Extensibility**: Understand the underlying generic system
+
 ### Structs
 
 ```k

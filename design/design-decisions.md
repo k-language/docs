@@ -6,28 +6,44 @@ K Language combines the best of Rust and Zig while maintaining systems programmi
 
 ## Key Decisions
 
-### 1. Optional Type Syntax: ?T (Zig-style)
+### 1. Built-in Type Sugar: Syntax Shortcuts for Generic Types
 
-**Decision**: Use `?T` instead of `Option<T>`
+**Decision**: Common generic types have concise sugar syntax
 
 ```k
-// K Language (adopted)
-const maybe: ?i32 = null;
+// Sugar syntax (written)      // Desugars to (actual type)
+?T                             // Option<T>
+!T                             // Result<T, Error>
+[N]T                           // Array<T, N>
+[]T                            // Slice<T>
+*T                             // Ptr<T>
+&T                             // Ref<T>
+&mut T                         // RefMut<T>
 
-if (maybe) |value| {  // Direct unwrapping
+// Example: Optional type
+const maybe: ?i32 = null;              // Sugar
+const maybe: Option<i32> = null;       // Explicit (same thing)
+
+if (maybe) |value| {  // Direct unwrapping works for both
     use(value);
 }
-
-// Rejected: Rust's Option<T>
-// const maybe: Option<i32> = None;
-// if let Some(value) = maybe { ... }
 ```
 
 **Rationale**:
-- Simpler syntax for common case
-- Integrates with Zig's error unions `!T`
-- Less boilerplate
-- Type is explicit in declaration
+- **Consistency**: All built-in types are just generic library types with sugar
+- **Simplicity**: Concise syntax for common cases
+- **Transparency**: Can use explicit form when clearer
+- **Extensibility**: Users can understand the type system better
+- **No magic**: Everything is a regular generic type underneath
+
+**Implementation Note**: The sugar is purely syntactic - compiler desugars during parsing:
+```k
+// You write:
+fn foo(x: ?i32) !void { ... }
+
+// Compiler sees:
+fn foo(x: Option<i32>) Result<void, Error> { ... }
+```
 
 ### 2. Memory Management: Three-Tier System
 
@@ -53,29 +69,43 @@ defer manual.deinit();
 - nodrop: Escape hatch for low-level code
 - Flexibility without sacrificing safety
 
-### 3. Error Handling: ! operator (Zig-style)
+### 3. Error Handling: Sugar for Result Types
 
-**Decision**: Use `!T` error unions instead of `Result<T, E>`
+**Decision**: `!T` is sugar for `Result<T, Error>` where Error is inferred error set
 
 ```k
-// K Language (adopted)
+// Sugar: !T means Result<T, Error>
 fn parse(str: []const u8) !i32 {
     if (invalid) return error.InvalidFormat;
     return 42;
 }
 
-// Can still use Result enum explicitly when needed
-const Result = enum {
-    Ok: T,
-    Err: E,
-};
+// Desugars to:
+fn parse(str: []const u8) Result<i32, Error> {
+    if (invalid) return Result(i32, Error){ .Err = error.InvalidFormat };
+    return Result(i32, Error){ .Ok = 42 };
+}
+
+// Can use explicit Result for custom error types
+fn parseCustom(str: []const u8) Result<i32, ParseError> {
+    // ...
+}
 ```
 
 **Rationale**:
-- More concise for common case
-- Better integration with allocators
-- Explicit error sets when needed
-- Result enum available for data structures
+- **Consistency**: Same sugar pattern as ?T = Option<T>
+- **Concise**: `!T` is shorter for common case
+- **Flexible**: Can use `Result<T, E>` for specific error types
+- **Transparent**: Result is just a library enum, not compiler magic
+
+**Error Set Inference**:
+```k
+// Compiler infers error set from return statements
+fn foo() !i32 {
+    return error.A;  // Returns Result<i32, {A, B}>
+    return error.B;
+}
+```
 
 ### 4. Pattern Matching: match over switch
 
