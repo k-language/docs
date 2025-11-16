@@ -533,27 +533,146 @@ error: kind mismatch in trait Foo
 
 ---
 
-## Infinite Kinds Problem
+## Arbitrarily Complex Kinds
 
-**Question**: How do we handle arbitrarily complex kinds?
+**Question**: How do we handle arbitrarily complex kinds like `((type, u8) -> type) -> ((type, u8) -> type)`?
 
-**Answer**: Practical limit + inference
+**Answer**: No artificial limits needed!
+
+### Why No Depth Limit?
+
+**Time complexity**: Kind checking is **O(kind tree size)**, not exponential:
 
 ```k
-// Practically limited by nesting depth
-type -> type                                    // Depth 1
-(type -> type) -> (type -> type)                // Depth 2
-((type -> type) -> (type -> type)) -> (...)     // Depth 3
-// ... up to reasonable limit (say, depth 10)
+// Simple kind
+type -> type                                    // O(3): type, ->, type
+
+// Complex kind
+((type -> type) -> (type -> type))              // O(11): still just tree traversal
 ```
 
-**Implementation**:
-1. Compiler has max kind depth (e.g., 10)
-2. Inference automatically figures out depth
-3. Explicit annotation if you hit the limit
-4. Error if you exceed the limit
+**Kind checking algorithm**:
+1. Parse kind expression → tree structure
+2. Compare trees structurally
+3. Time: O(size of tree)
 
-**In practice**: Depth > 3 is extremely rare. Monad transformers are depth 2, which covers 99% of real-world use cases.
+**This is NOT exponential!** Depth doesn't cause exponential blowup.
+
+---
+
+### Real Problems to Guard Against
+
+**Problem 1: Infinite Type Recursion**
+
+```k
+// ❌ PROBLEM: Infinite recursion
+type Foo = Foo;
+
+// ❌ PROBLEM: Mutual recursion
+type Bar = Baz;
+type Baz = Bar;
+```
+
+**Solution**: Occurs check during type unification (standard technique)
+
+**Problem 2: Type Checker Infinite Loop**
+
+```k
+// ❌ PROBLEM: Constraint solving doesn't terminate
+trait Foo(T) where T: Bar(T) {}
+trait Bar(T) where T: Foo(T) {}
+```
+
+**Solution**: Track constraint solving depth, limit **constraint solving iterations**, not kind depth
+
+---
+
+### Comparison with Other Languages
+
+**Haskell**: No kind depth limit
+- Kinds can be arbitrarily complex
+- Limits are on constraint solving iterations, not kind depth
+
+**Rust**: Type recursion limit (default 128)
+- This limits **type recursion**, not kind depth
+- `type Foo<T> = Vec<Foo<T>>` ← this is limited
+- Kind complexity is not the issue
+
+**Scala**: No kind depth limit
+- Higher-kinded types can be arbitrarily nested
+- Works fine in practice
+
+---
+
+### K Language Approach
+
+**No kind depth limit**:
+```k
+// All of these are fine:
+type -> type                                           // Depth 1
+(type -> type) -> (type -> type)                       // Depth 2
+((type -> type) -> (type -> type)) -> (...)            // Depth 3
+(((type, u8) -> type) -> ((type, u8) -> type))         // Depth 3, complex
+// ... arbitrarily deep is OK!
+```
+
+**What we DO limit**:
+1. **Recursion depth** in type unification (prevents infinite recursion)
+2. **Constraint solving iterations** (prevents infinite loops)
+3. **Type instantiation depth** (prevents infinite generic expansion)
+
+**Example limits that make sense**:
+```k
+// Limit recursive type unification
+const MAX_UNIFICATION_DEPTH = 128;  // Like Rust
+
+// Limit constraint solving
+const MAX_CONSTRAINT_ITERATIONS = 1000;
+
+// Limit type instantiation
+const MAX_INSTANTIATION_DEPTH = 64;
+```
+
+But **kind depth itself**: unlimited!
+
+---
+
+### Practical Example
+
+**Very deep kind** (no problem!):
+
+```k
+// Monad transformer stack
+type AppM = StateT(ReaderT(ExceptT(IO)));
+//          ^     ^      ^      ^
+//          Each adds one level of kind nesting
+
+// Kind of StateT: (type -> type) -> type -> type -> type
+// Kind of ReaderT: (type -> type) -> type -> type
+// Kind of ExceptT: (type -> type) -> type -> type
+// Kind of IO: type -> type
+
+// Composed kind is complex, but checking it is just tree comparison!
+```
+
+**Compiler handles this easily**:
+- Parse each kind → tree
+- Substitute and compose → bigger tree
+- Check composition is valid → tree traversal
+- **No exponential blowup!**
+
+---
+
+### Why I Was Wrong Initially
+
+**My mistake**: Conflated kind depth with type unification depth
+
+**Reality**:
+- **Kind depth**: Just tree size, O(n) to check
+- **Type unification depth**: Can cause infinite recursion, needs limit
+- **Constraint solving**: Can loop forever, needs iteration limit
+
+**Kinds are not the problem!**
 
 ---
 
@@ -576,8 +695,19 @@ type -> type                                    // Depth 1
 - ✅ Inference makes common cases easy
 - ✅ Aliases make complex cases readable
 - ✅ Explicit syntax for full control
+- ✅ **No artificial depth limits** - kinds can be arbitrarily complex
+- ✅ **O(tree size) complexity** - efficient kind checking
 - ✅ Better than Rust/Zig (they have nothing)
 - ✅ Competitive with Haskell/Scala 3
+
+### What Gets Limited (Correctly)
+
+Not kind depth, but:
+1. **Type unification recursion** (prevents `type Foo = Foo`)
+2. **Constraint solving iterations** (prevents infinite trait resolution)
+3. **Type instantiation depth** (prevents infinite generic expansion)
+
+These are the real problems that need limits, not kind complexity!
 
 ### Priority
 
@@ -589,5 +719,6 @@ type -> type                                    // Depth 1
 3. Create `std.kinds` module with aliases
 4. Implement explicit kind syntax
 5. Write comprehensive examples (monad transformers, etc.)
+6. **NO depth limit on kinds** - they're just trees!
 
-With this system, K would have the **most powerful kind system** among systems programming languages!
+With this system, K would have the **most powerful kind system** among systems programming languages, without artificial limitations!
